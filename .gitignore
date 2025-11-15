@@ -1,0 +1,28 @@
+# Rust编译产物
+/target/
+Cargo.lock
+
+# 生成的可执行文件
+*.exe
+*.pdb
+**/*.rs.bk
+
+# IDE和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志文件
+*.log
+
+# 临时文件
+*.tmp
+*.temp
+temp/
+tmp/

@@ -1,0 +1,65 @@
+# ERNIE 21B Llama服务配置文件 - 性能优化版
+# Model: ERNIE-4.5-21B-A3B-PT-Q3_K_S
+# 高级模型，21B参数量，Q3量化
+# 优化目标：提速 + 降低内存消耗
+
+[server]
+host = "0.0.0.0"
+port = 8766
+
+[model]
+# 模型文件路径（相对或绝对路径）
+path = "../models/ERNIE-4.5-21B-A3B-PT-Q3_K_S.gguf"
+# 模型名称（用于API响应）
+name = "ernie-21b"
+
+[inference]
+# ===== 推理参数配置 =====
+
+# 最大上下文长度（模型支持的上限）
+# 说明：这是模型能处理的最大上下文
+# 实际使用时，系统会根据 prompt 长度 + max_tokens 动态分配，不会浪费内存
+# 4096 = 平衡
+# 8192 = 大上下文
+# 16384 = 超长上下文（推荐，支持复杂任务规划）
+# 32768 = 极限上下文（如果模型和内存支持）
+n_ctx = 16384
+
+# CPU线程数（关键性能参数）
+# 建议设置为物理核心数（非超线程数）
+# 例如：8核16线程的CPU设置为8-12（可以略高于物理核心）
+# 过多线程会导致上下文切换开销，反而变慢
+n_threads = 10
+
+# GPU层数（纯CPU必须为0）
+n_gpu_layers = 0
+
+# 使用mmap加载模型（重要：减少50%+内存占用）
+# true = 模型从磁盘映射，不完全加载到RAM
+# false = 模型完全加载到RAM（快但占内存）
+use_mmap = true
+
+# 批处理大小（已在代码中固定为512，此参数保留作为参考）
+# 注意：实际使用的是代码中硬编码的值
+# n_batch = 512（大批次）
+# n_ubatch = 256（微批次，实际影响速度的参数）
+n_batch = 512
+
+[embedding]
+# Embedding模型文件路径
+model_path = "../models/bge-m3-Q4_K_M.gguf"
+# Embedding模型名称
+model_name = "bge-m3"
+# Embedding端口（与LLM分开）
+port = 8767
+# Embedding维度
+dimension = 1024
+# Embedding专用优化（小模型，快速响应）
+# 提升n_ctx以支持更长文本（BGE-M3支持8192）
+n_ctx = 8192
+n_threads = 4
+n_batch = 512
+
+[logging]
+# 日志级别: trace, debug, info, warn, error
+level = "info"

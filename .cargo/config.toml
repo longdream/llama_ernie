@@ -1,0 +1,14 @@
+# Cargo编译配置 - CPU优化
+
+[build]
+# 使用本机CPU特定指令集（AVX2, AVX512等）
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "opt-level=3",
+]
+
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "opt-level=3",
+]

@@ -9,7 +9,7 @@ port = 8766
 
 [model]
 # 模型文件路径（相对或绝对路径）
-path = "../models/ERNIE-4.5-21B-A3B-PT-Q3_K_S.gguf"
+path = "C:/Users/devcloud/Downloads/exe/ERNIE-4.5-21B-A3B-PT-Q3_K_S.gguf"
 # 模型名称（用于API响应）
 name = "ernie-21b"
 

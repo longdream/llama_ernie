@@ -26,3 +26,12 @@ Thumbs.db
 *.temp
 temp/
 tmp/
+
+# 模型文件（太大，不上传）
+*.gguf
+
+# Tauri 构建产物
+ollamaSetting/src-tauri/target/
+
+# Node modules
+node_modules/

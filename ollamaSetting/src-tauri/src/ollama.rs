@@ -479,16 +479,8 @@ pub fn stop_all_running_models() -> Result<Vec<String>, String> {
 }
 
 /// 预加载模型到内存（通过 API 发送一个简单请求来触发模型加载）
-/// 会先停止其他运行中的模型，确保只有一个模型运行
+/// 支持多模型并行运行（需要设置环境变量 OLLAMA_MAX_LOADED_MODELS）
 pub fn preload_model(name: &str, keep_alive: &str) -> Result<PreloadResult, String> {
-    // 先停止所有运行中的模型，确保只有一个模型运行
-    let stopped_models = stop_all_running_models().unwrap_or_default();
-    let stopped_info = if stopped_models.is_empty() {
-        String::new()
-    } else {
-        format!("（已停止: {}）", stopped_models.join(", "))
-    };
-    
     // 使用 Ollama API 发送一个简单请求来预热模型
     let start_time = std::time::Instant::now();
     
@@ -527,7 +519,7 @@ pub fn preload_model(name: &str, keep_alive: &str) -> Result<PreloadResult, Stri
         Ok(PreloadResult {
             success: true,
             model: name.to_string(),
-            message: format!("模型 {} 预加载成功{}", name, stopped_info),
+            message: format!("模型 {} 预加载成功", name),
             load_duration,
         })
     } else {

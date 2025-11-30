@@ -209,7 +209,6 @@ const preloadModel = async (modelName: string) => {
   // 显示当前运行中的模型
   if (runningModels.value.length > 0) {
     addLog('info', `当前运行中: ${runningModels.value.map(m => m.name).join(', ')}`);
-    addLog('info', '正在停止其他模型（确保单模型运行）...');
   }
   
   try {

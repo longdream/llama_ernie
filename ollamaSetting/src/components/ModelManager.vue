@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 
@@ -90,6 +90,55 @@ const enableThink = ref(localStorage.getItem('ollama_enable_think') === 'true');
 // 监听 Think 模式变化，保存到 localStorage
 watch(enableThink, (newValue) => {
   localStorage.setItem('ollama_enable_think', newValue ? 'true' : 'false');
+});
+
+// ==================== 保活功能 ====================
+const KEEP_ALIVE_INTERVAL = 4 * 60 * 1000;  // 4 分钟检测间隔
+const keepAliveEnabled = ref(localStorage.getItem('ollama_keep_alive_enabled') === 'true');  // 保活开关
+const protectedModels = ref<Set<string>>(new Set());  // 受保护的模型列表
+let keepAliveTimer: ReturnType<typeof setInterval> | null = null;  // 定时器 ID
+
+// 检测并重新加载被卸载的模型
+const checkAndReloadModels = async () => {
+  if (!keepAliveEnabled.value || protectedModels.value.size === 0) return;
+  
+  await loadRunningModels();
+  
+  for (const modelName of protectedModels.value) {
+    if (!isModelRunning(modelName)) {
+      addLog('warning', `检测到模型 ${modelName} 已卸载，正在自动重新加载...`);
+      await preloadModelInternal(modelName, true);  // 内部调用，标记为自动重载
+    }
+  }
+};
+
+// 启动保活定时器
+const startKeepAliveTimer = () => {
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+  }
+  keepAliveTimer = setInterval(checkAndReloadModels, KEEP_ALIVE_INTERVAL);
+  addLog('info', `保活模式已启用，每 ${KEEP_ALIVE_INTERVAL / 60000} 分钟检测一次`);
+};
+
+// 停止保活定时器
+const stopKeepAliveTimer = () => {
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
+  protectedModels.value.clear();
+  addLog('info', '保活模式已关闭，已清空受保护模型列表');
+};
+
+// 监听保活开关变化
+watch(keepAliveEnabled, (enabled) => {
+  localStorage.setItem('ollama_keep_alive_enabled', enabled ? 'true' : 'false');
+  if (enabled) {
+    startKeepAliveTimer();
+  } else {
+    stopKeepAliveTimer();
+  }
 });
 
 const recommendedModels = [
@@ -200,9 +249,15 @@ const selectModel = (name: string) => {
 
 // ==================== 预加载功能 ====================
 
-const preloadModel = async (modelName: string) => {
+// 内部预加载函数，支持标记是否为自动重载
+const preloadModelInternal = async (modelName: string, isAutoReload: boolean = false) => {
   preloading.value = modelName;
-  addLog('info', `========== 开始预加载模型 ==========`);
+  
+  if (isAutoReload) {
+    addLog('info', `========== 自动重新加载模型 ==========`);
+  } else {
+    addLog('info', `========== 开始预加载模型 ==========`);
+  }
   addLog('info', `模型: ${modelName}`);
   addLog('info', `Keep Alive: ${selectedKeepAlive.value === 'default' ? '默认(5分钟)' : selectedKeepAlive.value}`);
   
@@ -224,6 +279,12 @@ const preloadModel = async (modelName: string) => {
       addLog('success', result.message);
       addLog('info', `加载耗时: ${result.load_duration}`);
       addLog('info', `总操作耗时: ${elapsed} 秒`);
+      
+      // 如果保活模式开启，将模型加入保护列表
+      if (keepAliveEnabled.value) {
+        protectedModels.value.add(modelName);
+        addLog('info', `模型 ${modelName} 已加入保活保护列表`);
+      }
     }
     await loadRunningModels();
     addLog('success', `========== 预加载完成 ==========`);
@@ -236,8 +297,20 @@ const preloadModel = async (modelName: string) => {
   }
 };
 
+// 用户手动预加载模型
+const preloadModel = async (modelName: string) => {
+  await preloadModelInternal(modelName, false);
+};
+
 const unloadModel = async (modelName: string) => {
   addLog('info', `正在卸载模型: ${modelName}`);
+  
+  // 用户手动卸载时，从保护列表中移除该模型（防止自动重载）
+  if (protectedModels.value.has(modelName)) {
+    protectedModels.value.delete(modelName);
+    addLog('info', `模型 ${modelName} 已从保活保护列表中移除`);
+  }
+  
   try {
     const result = await invoke<string>('unload_model', { modelName });
     pullOutput.value = `✅ ${result}`;
@@ -312,7 +385,21 @@ const importGgufModel = async () => {
   }
 };
 
-onMounted(loadModels);
+onMounted(() => {
+  loadModels();
+  // 如果保活模式之前是开启的，恢复定时器
+  if (keepAliveEnabled.value) {
+    startKeepAliveTimer();
+  }
+});
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
+});
 </script>
 
 <template>
@@ -489,6 +576,23 @@ onMounted(loadModels);
           </div>
           <label class="toggle-switch">
             <input type="checkbox" v-model="enableThink" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        
+        <!-- 保活模式开关 -->
+        <div class="setting-item" style="display: flex; align-items: center; gap: 16px;">
+          <div class="setting-info" style="flex: 1;">
+            <div class="setting-label">
+              保活模式
+              <span v-if="keepAliveEnabled && protectedModels.size > 0" class="badge badge-success" style="margin-left: 8px;">
+                {{ protectedModels.size }} 个模型受保护
+              </span>
+            </div>
+            <div class="setting-desc">启用后每 4 分钟检测模型状态，若模型因超时被卸载会自动重新加载（手动卸载不会触发）</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" v-model="keepAliveEnabled" />
             <span class="toggle-slider"></span>
           </label>
         </div>

@@ -29,6 +29,12 @@ tmp/
 
 # 模型文件（太大，不上传）
 *.gguf
+*.bin
+*.safetensors
+
+# OpenVINO 模型目录（包含大文件）
+openvino/*/openvino_model.bin
+openvino/**/openvino_model.bin
 
 # Tauri 构建产物
 ollamaSetting/src-tauri/target/

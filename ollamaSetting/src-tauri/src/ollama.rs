@@ -492,15 +492,19 @@ pub fn preload_model(name: &str, keep_alive: &str) -> Result<PreloadResult, Stri
     };
     
     // 通过 API 发送请求来加载模型
+    // 使用空 prompt 只触发模型加载，不生成内容
     let json_body = format!(
-        r#"{{"model":"{}","prompt":"hi","stream":false,"keep_alive":"{}"}}"#,
+        r#"{{"model":"{}","prompt":"","stream":false,"keep_alive":"{}"}}"#,
         name, keep_alive_value
     );
     
+    // 设置超时时间为 10 分钟（大模型加载可能需要较长时间）
     let output = cmd::hidden_command("curl")
         .args(&[
             "-s",
             "-X", "POST",
+            "--max-time", "600",  // 10 分钟超时
+            "--connect-timeout", "10",  // 连接超时 10 秒
             "http://localhost:11434/api/generate",
             "-H", "Content-Type: application/json",
             "-d", &json_body,
@@ -515,7 +519,7 @@ pub fn preload_model(name: &str, keep_alive: &str) -> Result<PreloadResult, Stri
     let stderr = String::from_utf8_lossy(&output.stderr);
     
     // 检查响应是否成功
-    if output.status.success() && !stdout.contains("error") {
+    if output.status.success() && !stdout.contains("\"error\"") {
         Ok(PreloadResult {
             success: true,
             model: name.to_string(),
@@ -527,6 +531,8 @@ pub fn preload_model(name: &str, keep_alive: &str) -> Result<PreloadResult, Stri
             stderr.to_string()
         } else if stdout.contains("error") {
             stdout.to_string()
+        } else if stdout.is_empty() {
+            "请求超时或 Ollama 服务未响应".to_string()
         } else {
             "未知错误".to_string()
         };

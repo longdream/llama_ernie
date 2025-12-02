@@ -1,0 +1,7 @@
+# OpenVINO GenAI 推理依赖
+# 需要 Python 3.8+ 和 OpenVINO 2025.1.0+
+
+openvino-genai>=2025.1.0
+modelscope>=1.18.0
+huggingface_hub>=0.25.0
+

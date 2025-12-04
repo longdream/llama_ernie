@@ -1,5 +1,5 @@
 [package]
-name = "llama_ernie_server"
+name = "llama_qwen_server"
 version = "0.1.0"
 edition = "2021"
 
@@ -16,6 +16,9 @@ serde_json = "1.0"
 toml = "0.8"
 
 # LLM推理库（支持GGUF）- 使用utilityai/llama-cpp-rs
+# Intel Core Ultra 处理器：CPU 后端 + AVX2 指令集优化
+# 注意：Vulkan 编译在 Windows 上有路径长度限制问题
+# 推荐使用 OpenVINO 来利用 Intel Arc GPU (见 openvino/ 目录)
 llama-cpp-2 = { path = "vendor/llama-cpp-rs/llama-cpp-2" }
 anyhow = "1.0"
 hf-hub = { version = "0.3", features = ["tokio"] }

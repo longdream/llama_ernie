@@ -144,6 +144,7 @@ watch(keepAliveEnabled, (enabled) => {
 const recommendedModels = [
   { name: 'qwen3:30b-a3b', desc: 'Qwen3 30B MoE 模型，推荐', size: '~18GB' },
   { name: 'qwen3:8b', desc: 'Qwen3 8B 基础模型', size: '~5GB' },
+  { name: 'qwen3-vl:4b', desc: 'Qwen3 视觉语言模型，支持图像理解', size: '~3GB' },
   { name: 'llama3.2:3b', desc: 'Llama 3.2 3B 轻量模型', size: '~2GB' },
   { name: 'deepseek-r1:14b', desc: 'DeepSeek R1 14B', size: '~9GB' },
   { name: 'gemma2:9b', desc: 'Google Gemma 2 9B', size: '~5GB' },

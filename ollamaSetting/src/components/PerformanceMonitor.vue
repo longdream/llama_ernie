@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 import * as echarts from 'echarts';
 
 interface TestResult {
@@ -100,9 +101,73 @@ const loadModels = async () => {
 const streamingOutput = ref('');
 const thinkingOutput = ref('');
 
+// 视觉模型图像支持
+const selectedImagePath = ref('');
+const selectedImageBase64 = ref('');
+const imagePreviewUrl = ref('');
+
+// 判断是否为视觉模型
+const isVisionModel = computed(() => {
+  const visionModels = ['qwen3-vl', 'llava', 'bakllava', 'moondream', 'llama3.2-vision', 'minicpm-v'];
+  return visionModels.some(vm => selectedModel.value.toLowerCase().includes(vm));
+});
+
+// 选择图像文件
+const selectImage = async () => {
+  try {
+    const selected = await open({
+      multiple: false,
+      filters: [{
+        name: 'Images',
+        extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp']
+      }]
+    });
+    if (selected) {
+      selectedImagePath.value = selected as string;
+      // 读取图像并转换为 base64
+      const imageData = await invoke<string>('read_image_base64', { imagePath: selected });
+      selectedImageBase64.value = imageData;
+      // 创建预览 URL
+      const ext = (selected as string).split('.').pop()?.toLowerCase() || 'png';
+      const mimeType = ext === 'jpg' ? 'jpeg' : ext;
+      imagePreviewUrl.value = `data:image/${mimeType};base64,${imageData}`;
+      addLog('success', `已选择图像: ${(selected as string).split(/[/\\]/).pop()}`);
+    }
+  } catch (error) {
+    console.error('Failed to select image:', error);
+    addLog('error', `选择图像失败: ${error}`);
+  }
+};
+
+// 清除选择的图像
+const clearImage = () => {
+  selectedImagePath.value = '';
+  selectedImageBase64.value = '';
+  imagePreviewUrl.value = '';
+  addLog('info', '已清除图像');
+};
+
+// 用于取消正在进行的测试
+let abortController: AbortController | null = null;
+
+const stopTest = () => {
+  if (abortController) {
+    abortController.abort();
+    abortController = null;
+    addLog('warning', '测试已取消');
+  }
+};
+
 const runTest = async () => {
   if (!selectedModel.value || !testPrompt.value.trim()) {
     addLog('warning', '请选择模型并输入测试 Prompt');
+    return;
+  }
+  
+  // 如果正在测试，则取消
+  if (testing.value) {
+    stopTest();
+    testing.value = false;
     return;
   }
   
@@ -110,6 +175,9 @@ const runTest = async () => {
   currentResult.value = null;
   streamingOutput.value = '';
   thinkingOutput.value = '';
+  
+  // 创建新的 AbortController
+  abortController = new AbortController();
   
   // 从 localStorage 重新读取 Think 设置（确保与模型管理页面同步）
   const thinkEnabled = localStorage.getItem('ollama_enable_think') === 'true';
@@ -136,8 +204,11 @@ const runTest = async () => {
   addLog('info', `处理器: ${processorInfo}`);
   addLog('info', `显示思考过程: ${thinkEnabled ? '是' : '否'}`);
   addLog('info', `输入 Prompt: ${testPrompt.value}`);
+  if (isVisionModel.value && selectedImageBase64.value) {
+    addLog('info', `图像: ${selectedImagePath.value.split(/[/\\]/).pop()}`);
+  }
   addLog('info', '');
-  addLog('info', '>>> 开始流式输出 >>>');
+  addLog('info', '>>> 开始流式输出 (点击按钮可取消) >>>');
   
   const startTime = Date.now();
   let totalTokens = 0;
@@ -150,6 +221,17 @@ const runTest = async () => {
   let evalDuration = 0;
   
   try {
+    // 构建消息内容
+    let messageContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }> = testPrompt.value;
+    
+    // 如果是视觉模型且有图像，使用多模态格式
+    if (isVisionModel.value && selectedImageBase64.value) {
+      messageContent = [
+        { type: 'text', text: testPrompt.value },
+        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${selectedImageBase64.value}` } }
+      ];
+    }
+    
     // 使用 HTTP 流式请求 Ollama Chat API
     const response = await fetch('http://localhost:11434/api/chat', {
       method: 'POST',
@@ -159,10 +241,11 @@ const runTest = async () => {
       body: JSON.stringify({
         model: selectedModel.value,
         messages: [
-          { role: 'user', content: testPrompt.value }
+          { role: 'user', content: messageContent }
         ],
         stream: true,
       }),
+      signal: abortController.signal,
     });
     
     if (!response.ok) {
@@ -177,49 +260,68 @@ const runTest = async () => {
     const decoder = new TextDecoder();
     let buffer = '';
     
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      buffer += decoder.decode(value, { stream: true });
-      
-      // 处理可能的多行 JSON
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // 保留最后一个不完整的行
-      
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        
-        try {
-          const data = JSON.parse(line);
-          
-          // /api/chat 响应格式: { message: { role, content, thinking? }, done, ... }
-          if (data.message) {
-            // 提取内容
-            if (data.message.content) {
-              responseText += data.message.content;
-              streamingOutput.value = responseText;
-            }
-            // 提取思考过程（如果有且用户开启了显示）
-            if (data.message.thinking && thinkEnabled) {
-              thinkingText += data.message.thinking;
-              thinkingOutput.value = thinkingText;
-            }
-          }
-          
-          // 最后一条消息包含统计信息
-          if (data.done) {
-            totalDuration = data.total_duration || 0;
-            loadDuration = data.load_duration || 0;
-            promptEvalDuration = data.prompt_eval_duration || 0;
-            evalDuration = data.eval_duration || 0;
-            promptTokens = data.prompt_eval_count || 0;
-            totalTokens = data.eval_count || 0;
-          }
-        } catch (e) {
-          // 忽略解析错误
+    // 使用异步迭代处理流，让出控制权给 UI
+    const processStream = async () => {
+      while (true) {
+        // 检查是否被取消
+        if (abortController?.signal.aborted) {
+          reader.cancel();
+          break;
         }
+        
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        
+        // 处理可能的多行 JSON
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // 保留最后一个不完整的行
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
+          try {
+            const data = JSON.parse(line);
+            
+            // /api/chat 响应格式: { message: { role, content, thinking? }, done, ... }
+            if (data.message) {
+              // 提取内容
+              if (data.message.content) {
+                responseText += data.message.content;
+                streamingOutput.value = responseText;
+              }
+              // 提取思考过程（如果有且用户开启了显示）
+              if (data.message.thinking && thinkEnabled) {
+                thinkingText += data.message.thinking;
+                thinkingOutput.value = thinkingText;
+              }
+            }
+            
+            // 最后一条消息包含统计信息
+            if (data.done) {
+              totalDuration = data.total_duration || 0;
+              loadDuration = data.load_duration || 0;
+              promptEvalDuration = data.prompt_eval_duration || 0;
+              evalDuration = data.eval_duration || 0;
+              promptTokens = data.prompt_eval_count || 0;
+              totalTokens = data.eval_count || 0;
+            }
+          } catch (e) {
+            // 忽略解析错误
+          }
+        }
+        
+        // 让出控制权给 UI 线程，防止卡死
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
+    };
+    
+    await processStream();
+    
+    // 如果被取消，不显示结果
+    if (abortController?.signal.aborted) {
+      return;
     }
     
     const elapsed = (Date.now() - startTime) / 1000;
@@ -274,12 +376,17 @@ const runTest = async () => {
     
     updateChart();
     addLog('success', '========== 测试完成 ==========');
-  } catch (error) {
-    console.error('[性能测试] 测试失败:', error);
-    addLog('error', `测试失败: ${error}`);
-    addLog('warning', '请检查 Ollama 服务是否正在运行 (http://localhost:11434)');
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      addLog('warning', '测试已被用户取消');
+    } else {
+      console.error('[性能测试] 测试失败:', error);
+      addLog('error', `测试失败: ${error}`);
+      addLog('warning', '请检查 Ollama 服务是否正在运行 (http://localhost:11434)');
+    }
   } finally {
     testing.value = false;
+    abortController = null;
   }
 };
 
@@ -441,16 +548,19 @@ onMounted(async () => {
             />
           </div>
           <button 
-            class="btn btn-primary" 
+            :class="['btn', testing ? 'btn-danger' : 'btn-primary']" 
             @click="runTest"
-            :disabled="testing || !selectedModel"
+            :disabled="!selectedModel"
             style="height: 42px;"
           >
             <div v-if="testing" class="spinner"></div>
+            <svg v-if="testing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+              <rect x="6" y="6" width="12" height="12"/>
+            </svg>
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
-            {{ testing ? '测试中...' : '运行测试' }}
+            {{ testing ? '停止测试' : '运行测试' }}
           </button>
         </div>
         
@@ -459,8 +569,62 @@ onMounted(async () => {
           <span :class="['badge', enableThink ? 'badge-success' : 'badge-neutral']">
             Think: {{ enableThink ? '开启' : '关闭' }}
           </span>
+          <span v-if="isVisionModel" class="badge badge-info">
+            视觉模型
+          </span>
           <div style="font-size: 12px; color: var(--color-text-muted);">
             在「模型管理」→「预加载设置」中修改 Think 模式 · 使用 HTTP 流式 API 测试
+          </div>
+        </div>
+        
+        <!-- 视觉模型图像上传 -->
+        <div v-if="isVisionModel" style="margin-top: 16px; padding: 16px; background: var(--color-bg-secondary); border-radius: 8px; border: 1px dashed var(--color-border);">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px; color: var(--color-primary);">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+            <span style="font-weight: 500;">图像输入（可选）</span>
+          </div>
+          
+          <div v-if="!imagePreviewUrl" style="display: flex; gap: 12px;">
+            <button class="btn btn-secondary" @click="selectImage" style="flex: 1;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              选择图像
+            </button>
+          </div>
+          
+          <div v-else style="display: flex; gap: 16px; align-items: flex-start;">
+            <div style="position: relative;">
+              <img 
+                :src="imagePreviewUrl" 
+                alt="Preview" 
+                style="max-width: 200px; max-height: 150px; border-radius: 8px; border: 1px solid var(--color-border);"
+              />
+              <button 
+                class="btn btn-danger" 
+                @click="clearImage"
+                style="position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; padding: 0; border-radius: 50%;"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div style="flex: 1;">
+              <div style="font-size: 13px; color: var(--color-text-muted); margin-bottom: 4px;">已选择图像:</div>
+              <div style="font-size: 14px; word-break: break-all;">{{ selectedImagePath.split(/[/\\]/).pop() }}</div>
+            </div>
+          </div>
+          
+          <div style="font-size: 12px; color: var(--color-text-muted); margin-top: 12px;">
+            支持 PNG、JPG、GIF、WebP 格式。视觉模型可以理解图像内容并回答相关问题。
           </div>
         </div>
       </div>

@@ -94,12 +94,12 @@ impl Default for Config {
                 port: 8766,
             },
             model: ModelConfig {
-                path: "../models/ernie-4.5-0.3b-pt-q8_0.gguf".to_string(),
-                name: "ernie-0.3b".to_string(),
+                path: "Qwen3-30B-A3B-Instruct-2507-Q3_K_S.gguf".to_string(),
+                name: "qwen3-30b".to_string(),
             },
             inference: InferenceConfig {
-                n_ctx: 8192,
-                n_threads: 16,
+                n_ctx: 16384,
+                n_threads: 10,
                 n_gpu_layers: 0,  // 纯CPU
                 use_mmap: true,
             },
@@ -513,12 +513,21 @@ async fn chat_completions(
     let max_tokens = req.max_tokens.unwrap_or(512);
     let _top_p = req.top_p.unwrap_or(1.0);  // 保留以便将来使用
     
-    // 构建prompt (ChatML格式)
+    // 构建prompt (ChatML格式 - Qwen3 专用)
+    // Qwen3 模型使用 /no_think 指令禁用思考模式，直接输出答案
     let mut prompt = String::new();
-    for msg in &req.messages {
+    for (i, msg) in req.messages.iter().enumerate() {
         match msg.role.as_str() {
             "system" => prompt.push_str(&format!("<|im_start|>system\n{}<|im_end|>\n", msg.content)),
-            "user" => prompt.push_str(&format!("<|im_start|>user\n{}<|im_end|>\n", msg.content)),
+            "user" => {
+                // 在最后一条用户消息后添加 /no_think 禁用思考模式
+                let is_last_user = req.messages.iter().skip(i + 1).all(|m| m.role != "user");
+                if is_last_user {
+                    prompt.push_str(&format!("<|im_start|>user\n{} /no_think<|im_end|>\n", msg.content));
+                } else {
+                    prompt.push_str(&format!("<|im_start|>user\n{}<|im_end|>\n", msg.content));
+                }
+            },
             "assistant" => prompt.push_str(&format!("<|im_start|>assistant\n{}<|im_end|>\n", msg.content)),
             _ => {}
         }
@@ -611,7 +620,7 @@ async fn main() -> Result<()> {
         .init();
 
     info!("====================================");
-    info!("  ERNIE 0.3B Llama.cpp 服务 (Rust)");
+    info!("  Qwen3 Llama.cpp 服务 (Rust)");
     info!("  OpenAI兼容API - 实际推理版本");
     info!("====================================");
     

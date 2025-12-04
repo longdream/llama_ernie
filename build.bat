@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 > nul
 echo ====================================
-echo   编译 ERNIE 0.3B Llama服务 (Rust)
+echo   编译 Qwen3 Llama服务 (Rust)
 echo ====================================
 echo.
 
@@ -32,8 +32,8 @@ if errorlevel 1 (
 
 echo.
 echo [3/3] 复制可执行文件...
-if exist "target\release\llama_ernie_server.exe" (
-    copy target\release\llama_ernie_server.exe llama_ernie_server.exe >nul
+if exist "target\release\llama_qwen_server.exe" (
+    copy target\release\llama_qwen_server.exe llama_qwen.exe >nul
     echo ✅ 可执行文件已复制
 ) else (
     echo [ERROR] 未找到编译产物
@@ -46,14 +46,16 @@ echo ====================================
 echo ✅ 编译成功！
 echo ====================================
 echo.
-echo 生成文件: llama_ernie_server.exe
-for %%F in (llama_ernie_server.exe) do echo 文件大小: %%~zF 字节 (%%~zF / 1024 / 1024 MB)
+echo 生成文件: llama_qwen.exe
+for %%F in (llama_qwen.exe) do echo 文件大小: %%~zF 字节
 echo.
 echo 📚 使用方法:
-echo   1. 确保模型文件在 ../models/ernie-4.5-0.3b-pt-q8_0.gguf
-echo   2. 运行: start.bat 或 llama_ernie_server.exe
+echo   1. 确保模型文件 Qwen3-30B-A3B-Instruct-2507-Q3_K_S.gguf 在当前目录
+echo   2. 运行: start.bat 或 llama_qwen.exe
 echo   3. 访问: http://localhost:8766/health
 echo.
-echo 💡 提示: 可以直接分发 llama_ernie_server.exe，无需Rust环境
+echo 💡 提示: 
+echo   - 代码已添加 /no_think 指令禁用思考模式
+echo   - 可以直接分发 llama_qwen.exe，无需Rust环境
 echo.
 pause

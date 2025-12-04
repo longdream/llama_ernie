@@ -1,14 +1,14 @@
 @echo off
 chcp 65001 > nul
 echo ====================================
-echo   ERNIE 0.3B Llama服务 (Rust)
+echo   Qwen3 Llama服务 (Rust)
 echo   OpenAI兼容API
 echo ====================================
 echo.
 
 REM 检查exe是否存在
-if not exist "llama_ernie_server.exe" (
-    echo [ERROR] 未找到 llama_ernie_server.exe
+if not exist "llama_qwen.exe" (
+    echo [ERROR] 未找到 llama_qwen.exe
     echo.
     echo 请先编译项目:
     echo   方式1: 运行 build.bat
@@ -42,6 +42,10 @@ echo   - 模型列表: http://localhost:8766/v1/models
 echo   - 聊天端点: http://localhost:8766/v1/chat/completions
 echo   - Embedding: http://localhost:8766/v1/embeddings
 echo.
+echo 💡 特性:
+echo   - 已启用 /no_think 模式，禁用思考输出
+echo   - 支持 Qwen3-30B-A3B MoE 模型
+echo.
 echo 📝 日志文件: logs\service.log
 echo 💡 提示: 按 Ctrl+C 停止服务
 echo ====================================
@@ -52,4 +56,4 @@ if not exist "logs" mkdir logs
 
 REM 启动服务并同时输出到控制台和日志文件
 REM 使用 PowerShell 实现 tee 功能
-powershell -Command "& { .\llama_ernie_server.exe 2>&1 | Tee-Object -FilePath 'logs\service.log' }"
+powershell -Command "& { .\llama_qwen.exe 2>&1 | Tee-Object -FilePath 'logs\service.log' }"

@@ -3,6 +3,8 @@ mod config;
 mod gpu;
 mod ollama;
 
+use std::fs;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use config::{EnvConfig, SystemInfo};
 use gpu::GpuInfo;
 use ollama::{OllamaModel, OllamaStatus, OllamaVersion, TestResult, PreloadResult, ImportResult};
@@ -102,6 +104,19 @@ async fn import_gguf_model(gguf_path: String, model_name: String) -> Result<Impo
         .map_err(|e| format!("Task failed: {}", e))?
 }
 
+// ============ Image Commands ============
+
+#[tauri::command]
+async fn read_image_base64(image_path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let data = fs::read(&image_path)
+            .map_err(|e| format!("Failed to read image file: {}", e))?;
+        Ok(BASE64.encode(&data))
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 // ============ Config Commands ============
 
 #[tauri::command]
@@ -177,6 +192,8 @@ pub fn run() {
             unload_model,
             // Import GGUF
             import_gguf_model,
+            // Image
+            read_image_base64,
             // Config
             get_env_config,
             set_env_variable,

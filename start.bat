@@ -1,9 +1,27 @@
 @echo off
 chcp 65001 > nul
 echo ====================================
-echo   Qwen3 Llama服务 (Rust)
-echo   OpenAI兼容API
+echo   启动 Qwen3 Llama服务 (Vulkan GPU)
 echo ====================================
+echo.
+
+REM 设置 Vulkan 环境 (根据你提供的路径)
+set "VULKAN_SDK=D:\Programs\VulkanSDK143281"
+set "PATH=%VULKAN_SDK%\Bin;%PATH%"
+
+REM 强制使用 Vulkan 设备 0 (通常是独立显卡或高性能集显)
+set GGML_VULKAN_DEVICE=0
+
+REM 开启 Vulkan 调试日志
+set GGML_VULKAN_DEBUG=1
+set GGML_VULKAN_PERF=1
+
+REM 设置日志级别
+set RUST_LOG=info,llama_cpp_2=info
+
+echo [配置信息]
+echo VULKAN_SDK: %VULKAN_SDK%
+echo GGML_VULKAN_DEVICE: %GGML_VULKAN_DEVICE%
 echo.
 
 REM 检查exe是否存在
@@ -11,8 +29,7 @@ if not exist "llama_qwen.exe" (
     echo [ERROR] 未找到 llama_qwen.exe
     echo.
     echo 请先编译项目:
-    echo   方式1: 运行 build.bat
-    echo   方式2: 执行 cargo build --release
+    echo   方式1: 运行 build_vulkan.bat
     echo.
     pause
     exit /b 1
@@ -27,33 +44,16 @@ if exist "config.toml" (
     findstr /C:"n_ctx = " config.toml
     findstr /C:"n_threads = " config.toml
     findstr /C:"n_gpu_layers = " config.toml
-) else (
-    echo   使用默认配置
 )
 echo ====================================
 echo.
 
 echo 🚀 启动服务...
-echo.
-echo 📡 服务信息:
-echo   - 监听地址: http://0.0.0.0:8766
-echo   - 健康检查: http://localhost:8766/health
-echo   - 模型列表: http://localhost:8766/v1/models
-echo   - 聊天端点: http://localhost:8766/v1/chat/completions
-echo   - Embedding: http://localhost:8766/v1/embeddings
-echo.
-echo 💡 特性:
-echo   - 已启用 /no_think 模式，禁用思考输出
-echo   - 支持 Qwen3-30B-A3B MoE 模型
-echo.
 echo 📝 日志文件: logs\service.log
-echo 💡 提示: 按 Ctrl+C 停止服务
-echo ====================================
 echo.
 
 REM 创建日志目录
 if not exist "logs" mkdir logs
 
 REM 启动服务并同时输出到控制台和日志文件
-REM 使用 PowerShell 实现 tee 功能
 powershell -Command "& { .\llama_qwen.exe 2>&1 | Tee-Object -FilePath 'logs\service.log' }"

@@ -12,7 +12,8 @@ port = 8766
 
 [model]
 # 模型文件路径（相对或绝对路径）
-path = "Qwen3-30B-A3B-Instruct-2507-Q3_K_S.gguf"
+# 使用Q4_K_M量化格式以支持Vulkan GPU加速
+path = "D:\\models\\Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"
 # 模型名称（用于API响应）
 name = "qwen3-30b"
 
@@ -35,8 +36,10 @@ n_ctx = 16384
 # 过多线程会导致上下文切换开销，反而变慢
 n_threads = 10
 
-# GPU层数（0=纯CPU，-1=全部层放GPU，48=Qwen3-30B-A3B的全部48层）
-n_gpu_layers = 48
+# GPU层数（0=纯CPU，999=全部层放GPU）
+# Qwen3-30B-A3B有48层，设置999确保所有层都放到GPU
+# Q4_K_M量化格式完全兼容Vulkan GPU加速
+n_gpu_layers = 999
 
 # 使用mmap加载模型（重要：减少50%+内存占用）
 # true = 模型从磁盘映射，不完全加载到RAM
@@ -51,7 +54,7 @@ n_batch = 512
 
 [embedding]
 # Embedding模型文件路径
-model_path = "../models/bge-m3-Q4_K_M.gguf"
+model_path = "D:\\models\\bge-m3-Q4_K_M.gguf"
 # Embedding模型名称
 model_name = "bge-m3"
 # Embedding端口（与LLM分开）

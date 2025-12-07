@@ -16,10 +16,11 @@ serde_json = "1.0"
 toml = "0.8"
 
 # LLM推理库（支持GGUF）- 使用utilityai/llama-cpp-rs
-# Intel Core Ultra 处理器：CPU 后端 + AVX2 指令集优化
-# 注意：Vulkan 编译在 Windows 上有路径长度限制问题
-# 推荐使用 OpenVINO 来利用 Intel Arc GPU (见 openvino/ 目录)
-llama-cpp-2 = { path = "vendor/llama-cpp-rs/llama-cpp-2" }
+# AMD Radeon 780M: 使用 OpenCL 后端进行 GPU 加速
+# Vulkan在AMD集成显卡上存在buffer兼容性问题
+# ROCm/HIP在Windows上有MSVC编译器兼容性问题
+# OpenCL是Windows上AMD GPU最稳定的GPU加速方案
+llama-cpp-2 = { path = "vendor/llama-cpp-rs/llama-cpp-2", features = ["opencl"] }
 anyhow = "1.0"
 hf-hub = { version = "0.3", features = ["tokio"] }
 
